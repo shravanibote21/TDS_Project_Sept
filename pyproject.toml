@@ -1,0 +1,12 @@
+[project]
+name = "project1-tds-t3-2025"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.2",
+    "openai>=2.3.0",
+    "pygithub>=2.8.1",
+    "python-dotenv>=1.1.1",
+]

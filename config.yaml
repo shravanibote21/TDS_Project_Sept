@@ -1,0 +1,7 @@
+title: LLM Code Deployment System
+emoji: 🚀
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_file: main.py
+app_port: 5000

@@ -1,0 +1,33 @@
+# Ignore Python cache and venvs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+.venv/
+venv/
+.env.local
+.env.development
+.env.production
+
+# Git and editor
+.git/
+.gitignore
+.sourcery.yaml
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node / front-end artifacts if any
+node_modules/
+dist/
+build/
+
+# Notebooks and data
+*.ipynb_checkpoints/
+.envrc
+test_api.py
+test_api.sh

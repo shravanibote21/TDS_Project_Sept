@@ -1,0 +1,13 @@
+Project Requirements Document
+=============================
+Version: 1.0
+Date: 2025-10-14
+Author: Test Team
+
+This is a sample text file for testing file preview functionality.
+The system should be able to read the first 5 lines of this file.
+Each line contains important information.
+Line 4: Testing proper line reading.
+Line 5: This should be the last line displayed in preview.
+Line 6: This line should NOT appear in the preview.
+Additional content follows but won't be visible in the initial preview.

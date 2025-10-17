@@ -1,0 +1,142 @@
+from typing import Dict, Optional
+
+from .config import get_openai_client, get_fallback_client
+from .file_handler import process_all_attachments
+
+
+def generate_app_code(
+    brief: str,
+    checks: list = [],
+    attachments: Optional[list] = None,
+    existing_code: Optional[str] = None,
+    round_num: int = 1,
+) -> Dict[str, str]:
+    client = get_openai_client()
+
+    attachments_info = process_all_attachments(attachments)
+    checks = checks or []
+
+    existing_context = ""
+    if existing_code and round_num > 1:
+        existing_context = f"""\n\nEXISTING CODE FROM ROUND {round_num - 1}:\n```html\n{existing_code}\n```\n\nIMPORTANT: Modify and enhance the existing code above according to the new brief below. Preserve all working functionality from previous rounds unless the brief explicitly asks to change it.\n"""
+
+    prompt = f"""Generate a complete, minimal single-page web application based on this brief:{existing_context}
+
+Brief: {brief}
+
+Evaluation Checks (must all pass):
+{chr(10).join(["- " + check for check in checks])}
+{attachments_info}
+
+Critical Requirements:
+1. Create a single HTML file with embedded CSS and JavaScript
+2. The app must satisfy ALL evaluation checks listed above
+3. If attachments are provided as data URIs, embed them directly in the HTML
+4. Handle URL parameters (e.g., ?url=, ?token=) as specified in the brief
+5. Use CDN links for external libraries (Bootstrap, marked, highlight.js, etc.)
+6. Include proper error handling and user feedback
+7. Make it visually clean and professional
+8. Ensure all required element IDs match the checks exactly
+9. The HTML should be complete, valid, and ready to deploy to GitHub Pages
+10. Test that all JavaScript functionality works correctly
+
+Return ONLY the complete HTML code with no explanations, no comments, no markdown formatting."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gemini-2.5-flash",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert web developer. Generate clean, functional, production-ready HTML applications that pass all specified checks.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        )
+        html_content = response.choices[0].message.content
+    except Exception:
+        fallback_client = get_fallback_client()
+        response = fallback_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert web developer. Generate clean, functional, production-ready HTML applications that pass all specified checks.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        )
+        html_content = response.choices[0].message.content
+
+    if html_content is None:
+        print("No HTML content generated.")
+        return {"index.html": ""}
+
+    if "```html" in html_content:
+        html_content = html_content.split("```html")[1].split("```")[0].strip()
+    elif "```" in html_content:
+        html_content = html_content.split("```")[1].split("```")[0].strip()
+
+    return {"index.html": html_content}
+
+
+def generate_readme(task: str, brief: str, repo_url: str, pages_url: str) -> str:
+    client = get_openai_client()
+
+    prompt = f"""Generate a professional README.md for this project:
+
+Task: {task}
+Brief: {brief}
+Repository: {repo_url}
+Live Demo: {pages_url}
+
+The README should include:
+1. Project title and brief description
+2. Features/functionality overview
+3. Setup instructions (if any)
+4. Usage instructions
+5. Technical implementation details
+6. License information (MIT)
+
+Make it clear, professional, and well-structured with proper markdown formatting."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gemini-2.5-flash",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert at writing professional technical documentation.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        )
+        readme_content = response.choices[0].message.content
+    except Exception:
+        fallback_client = get_fallback_client()
+        response = fallback_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert at writing professional technical documentation.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        )
+        readme_content = response.choices[0].message.content
+
+    if readme_content is None:
+        print("No README content generated.")
+        return ""
+
+    if "```markdown" in readme_content:
+        readme_content = readme_content.split("```markdown")[1].split("```")[0].strip()
+    elif "```" in readme_content:
+        readme_content = readme_content.split("```")[1].split("```")[0].strip()
+
+    return readme_content

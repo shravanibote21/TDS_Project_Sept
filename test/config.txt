@@ -1,0 +1,7 @@
+API_KEY=test_key_12345
+DATABASE_URL=postgresql://localhost/testdb
+MAX_CONNECTIONS=100
+TIMEOUT=30
+DEBUG_MODE=true
+LOG_LEVEL=info
+CACHE_ENABLED=false
