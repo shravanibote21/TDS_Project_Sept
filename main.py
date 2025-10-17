@@ -82,7 +82,7 @@ def handle_request():
                 repo_info["pages_url"],
             )
         except Exception as e:
-            print(f"Warning: README update failed: {str(e)}")
+            logger.warning("README update failed: %s", str(e))
 
         current_step = "fetching commit info"
         try:

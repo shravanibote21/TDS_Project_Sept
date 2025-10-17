@@ -6,6 +6,9 @@ from .config import get_github_client, GITHUB_USERNAME, GITHUB_TOKEN
 from .code_generator import generate_readme as generate_readme_content
 from .asset_handler import process_html_assets
 from requests import RequestException
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_existing_code(task: str, path: str = "index.html") -> Optional[str]:
@@ -17,34 +20,34 @@ def get_existing_code(task: str, path: str = "index.html") -> Optional[str]:
             repo = user.get_repo(task)
         except GithubException as e:
             if e.status == 404:
-                print(f"Repository '{task}' not found (this is OK for first time)")
+                logger.info("Repository '%s' not found (first time is OK)", task)
                 return None
             elif e.status == 403:
-                print(f"Permission denied accessing repository '{task}'")
+                logger.warning("Permission denied accessing repository '%s'", task)
                 return None
             else:
-                print(f"Error accessing repository '{task}': {str(e)}")
+                logger.warning("Error accessing repository '%s': %s", task, str(e))
                 return None
 
         try:
             contents = repo.get_contents(path, ref="main")
             if hasattr(contents, "decoded_content"):
                 decoded = contents.decoded_content.decode("utf-8")
-                print(f"Successfully retrieved {path} from {task} (size: {len(decoded)} chars)")
+                logger.info("Retrieved %s from %s (size: %s chars)", path, task, len(decoded))
                 return decoded
             else:
-                print(f"File {path} exists but has no content")
+                logger.info("File %s exists but has no content", path)
                 return None
         except GithubException as e:
             if e.status == 404:
-                print(f"File '{path}' not found in repository '{task}' (this is OK)")
+                logger.info("File '%s' not found in repository '%s' (OK)", path, task)
                 return None
             else:
-                print(f"Error fetching {path} from {task}: {str(e)}")
+                logger.warning("Error fetching %s from %s: %s", path, task, str(e))
                 return None
                 
     except Exception as e:
-        print(f"Unexpected error fetching existing code from {task}: {str(e)}")
+        logger.warning("Unexpected error fetching existing code from %s: %s", task, str(e))
         return None
 
 
@@ -94,8 +97,8 @@ def create_or_update_repo(
         github_client = get_github_client()
         user = github_client.get_user()
     except Exception as e:
-        print(f"Failed to authenticate with GitHub: {str(e)}")
-        print("Please check your GITHUB_TOKEN in .env file")
+        logger.error("Failed to authenticate with GitHub: %s", str(e))
+        logger.error("Please check your GITHUB_TOKEN in .env file")
         raise
 
     repo_name = task
@@ -105,13 +108,11 @@ def create_or_update_repo(
     existing_repo = None
     try:
         existing_repo = user.get_repo(repo_name)
-        print(
-            f"Repository {repo_name} already exists, updating for round {round_num}..."
-        )
+        logger.info("Repository %s already exists, updating for round %s...", repo_name, round_num)
         repo = existing_repo
     except GithubException as e:
         if e.status == 404:
-            print(f"Creating new repository {repo_name}...")
+            logger.info("Creating new repository %s...", repo_name)
             try:
                 repo = user.create_repo(
                     name=repo_name,
@@ -119,7 +120,7 @@ def create_or_update_repo(
                     private=False,
                     auto_init=False,
                 )
-                print(f"Repository {repo_name} created successfully")
+                logger.info("Repository %s created successfully", repo_name)
 
                 try:
                     repo.create_file(
@@ -127,12 +128,12 @@ def create_or_update_repo(
                         message="Add MIT License",
                         content=get_mit_license(),
                     )
-                    print("LICENSE file created")
+                    logger.info("LICENSE file created")
                 except GithubException as license_error:
                     if license_error.status == 422:
-                        print("LICENSE already exists, skipping...")
+                        logger.info("LICENSE already exists, skipping...")
                     else:
-                        print(f"Warning: Could not create LICENSE: {str(license_error)}")
+                        logger.warning("Could not create LICENSE: %s", str(license_error))
 
                 try:
                     repo.create_file(
@@ -140,21 +141,19 @@ def create_or_update_repo(
                         message="Add README",
                         content=f"# {task}\n\nGenerated application for {task}",
                     )
-                    print("README.md created")
+                    logger.info("README.md created")
                 except GithubException as readme_error:
                     if readme_error.status == 422:
-                        print("README.md already exists, will be updated later...")
+                        logger.info("README.md already exists, will be updated later...")
                     else:
-                        print(f"Warning: Could not create README: {str(readme_error)}")
+                        logger.warning("Could not create README: %s", str(readme_error))
 
             except GithubException as create_error:
                 if (
                     create_error.status == 422
                     and "name already exists" in str(create_error).lower()
                 ):
-                    print(
-                        f"Repository {repo_name} was just created by another process, fetching it..."
-                    )
+                    logger.info("Repository %s was just created by another process, fetching it...", repo_name)
                     try:
                         repo = user.get_repo(repo_name)
                     except GithubException as fetch_error:
@@ -173,12 +172,12 @@ def create_or_update_repo(
         "index.html", "<html><body><h1>Welcome</h1></body></html>"
     )
 
-    print("Processing HTML assets (extracting large base64 data URIs)...")
+    logger.info("Processing HTML assets (extracting large base64 data URIs)...")
     try:
         index_content = process_html_assets(index_content, repo, round_num)
     except Exception as e:
-        print(f"Warning: Asset processing failed: {str(e)}")
-        print("Continuing with original HTML (data URIs intact)...")
+        logger.warning("Asset processing failed: %s", str(e))
+        logger.info("Continuing with original HTML (data URIs intact)...")
 
     try:
         upsert_pages_index(
@@ -190,14 +189,14 @@ def create_or_update_repo(
             commit_msg=f"Deploy app for round {round_num}",
         )
     except Exception as e:
-        print(f"Error during Pages setup: {str(e)}")
-        print("Continuing despite Pages setup issues (file should be uploaded)...")
+        logger.warning("Error during Pages setup: %s", str(e))
+        logger.info("Continuing despite Pages setup issues (file should be uploaded)...")
 
     try:
         commits = repo.get_commits()
         latest_commit_sha = commits[0].sha
     except Exception as e:
-        print(f"Warning: Could not fetch latest commit: {str(e)}")
+        logger.warning("Could not fetch latest commit: %s", str(e))
         latest_commit_sha = "unknown"
 
     pages_url = f"https://{owner}.github.io/{repo_name}/"
@@ -234,7 +233,7 @@ def upsert_pages_index(
                 sha=contents.sha,
                 branch=branch,
             )
-            print(f"{path} updated on {branch}")
+            logger.info("%s updated on %s", path, branch)
             break 
         except GithubException as e:
             if getattr(e, "status", None) == 404 or "Not Found" in str(e):
@@ -245,12 +244,12 @@ def upsert_pages_index(
                         content=html,
                         branch=branch,
                     )
-                    print(f"{path} created on {branch}")
+                    logger.info("%s created on %s", path, branch)
                     break  
                 except GithubException as create_error:
                     if create_error.status == 422 and "sha" in str(create_error).lower():
                         if attempt < max_retries - 1:
-                            print(f"File created by concurrent request, retrying update (attempt {attempt + 2}/{max_retries})...")
+                            logger.info("File created concurrently, retrying update (attempt %s/%s)...", attempt + 2, max_retries)
                             time.sleep(1)
                             continue
                         else:
@@ -259,7 +258,7 @@ def upsert_pages_index(
                         raise
             elif e.status == 409 or ("sha" in str(e).lower() and "does not match" in str(e).lower()):
                 if attempt < max_retries - 1:
-                    print(f"SHA conflict detected (concurrent update), retrying (attempt {attempt + 2}/{max_retries})...")
+                    logger.info("SHA conflict detected (concurrent update), retrying (attempt %s/%s)...", attempt + 2, max_retries)
                     time.sleep(1)  
                     continue
                 else:
@@ -283,108 +282,108 @@ def upsert_pages_index(
             r = requests.get(f"{base}/repos/{owner}/{repo_name}/pages", headers=hdrs, timeout=10)
             
             if r.status_code == 404:
-                print(f"GitHub Pages not found, creating (attempt {attempt + 1}/{max_retries})...")
+                logger.info("GitHub Pages not found, creating (attempt %s/%s)...", attempt + 1, max_retries)
                 body = {"source": {"branch": branch, "path": "/"}}
                 cr = requests.post(
                     f"{base}/repos/{owner}/{repo_name}/pages", headers=hdrs, json=body, timeout=10
                 )
                 
                 if cr.status_code in (201, 202):
-                    print("Pages site created successfully")
+                    logger.info("Pages site created successfully")
                     pages_configured = True
                     break  
                 elif cr.status_code == 409:
-                    print("Pages site already exists (409 - created by concurrent request)")
+                    logger.info("Pages site already exists (409 - concurrent)")
                     pages_configured = True
                     break 
                 elif cr.status_code == 403:
-                    print(f"Permission denied (403). Pages might be disabled for this repo. Details: {cr.text}")
+                    logger.warning("Permission denied (403) for Pages: %s", cr.text)
                     break 
                 else:
                     error_msg = f"Failed to create Pages site: {cr.status_code} {cr.text}"
                     if attempt < max_retries - 1:
-                        print(f"{error_msg}. Retrying in {retry_delay} seconds...")
+                        logger.info("%s. Retrying in %s seconds...", error_msg, retry_delay)
                         time.sleep(retry_delay)
                         continue
                     else:
-                        print(f"Warning: {error_msg}. File uploaded but Pages setup incomplete.")
+                        logger.warning("%s. File uploaded but Pages setup incomplete.", error_msg)
                         break
                         
             elif r.status_code == 200:
-                print("Pages site exists, ensuring correct configuration...")
+                logger.info("Pages site exists, ensuring correct configuration...")
                 body = {"source": {"branch": branch, "path": "/"}}
                 pr = requests.patch(
                     f"{base}/repos/{owner}/{repo_name}/pages", headers=hdrs, json=body, timeout=10
                 )
                 
                 if pr.status_code in (200, 202, 204):
-                    print("Pages configuration confirmed/updated")
+                    logger.info("Pages configuration confirmed/updated")
                     pages_configured = True
                     break  
                 elif pr.status_code == 404:
-                    print("Pages deleted between checks, will retry creation...")
+                    logger.info("Pages deleted between checks, will retry creation...")
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
                         continue
                     else:
-                        print("Warning: Could not update Pages config after retries. File is uploaded.")
+                        logger.warning("Could not update Pages config after retries. File is uploaded.")
                         break
                 elif pr.status_code == 403:
-                    print(f"Permission denied (403). Pages might be disabled. Details: {pr.text}")
+                    logger.warning("Permission denied (403) updating Pages: %s", pr.text)
                     break 
                 else:
                     error_msg = f"Failed to update Pages config: {pr.status_code} {pr.text}"
                     if attempt < max_retries - 1:
-                        print(f"{error_msg}. Retrying in {retry_delay} seconds...")
+                        logger.info("%s. Retrying in %s seconds...", error_msg, retry_delay)
                         time.sleep(retry_delay)
                         continue
                     else:
-                        print(f"Warning: {error_msg}. File uploaded but Pages update incomplete.")
+                        logger.warning("%s. File uploaded but Pages update incomplete.", error_msg)
                         break
                         
             elif r.status_code == 403:
-                print(f"Permission denied (403) when checking Pages status. Pages might be disabled. Details: {r.text}")
+                logger.warning("Permission denied (403) querying Pages: %s", r.text)
                 break 
             elif r.status_code == 401:
                 raise RuntimeError(f"Authentication failed (401). Please check GITHUB_TOKEN. Details: {r.text}")
             else:
                 error_msg = f"Unexpected response when querying Pages site: {r.status_code} {r.text}"
                 if attempt < max_retries - 1:
-                    print(f"{error_msg}. Retrying in {retry_delay} seconds...")
+                    logger.info("%s. Retrying in %s seconds...", error_msg, retry_delay)
                     time.sleep(retry_delay)
                     continue
                 else:
-                    print(f"Warning: {error_msg}. File uploaded but Pages status unclear.")
+                    logger.warning("%s. File uploaded but Pages status unclear.", error_msg)
                     break
-                    
+                
         except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
-                print(f"Request timeout (attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay} seconds...")
+                logger.info("Request timeout (attempt %s/%s). Retrying in %s seconds...", attempt + 1, max_retries, retry_delay)
                 time.sleep(retry_delay)
                 continue
             else:
-                print("Warning: Request timeout after retries. File uploaded but Pages status unclear.")
+                logger.warning("Request timeout after retries. File uploaded but Pages status unclear.")
                 break
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
-                print(f"Request error: {str(e)} (attempt {attempt + 1}/{max_retries}). Retrying in {retry_delay} seconds...")
+                logger.info("Request error: %s (attempt %s/%s). Retrying in %s seconds...", str(e), attempt + 1, max_retries, retry_delay)
                 time.sleep(retry_delay)
                 continue
             else:
-                print(f"Warning: Request error after retries: {str(e)}. File uploaded but Pages status unclear.")
+                logger.warning("Request error after retries: %s. File uploaded but Pages status unclear.", str(e))
                 break
 
     # Request a fresh build and wait for it to complete
     # Note: The build request returns 201/202 immediately, but the actual build takes time
     if pages_configured:
         try:
-            print("Requesting Pages build...")
+            logger.info("Requesting Pages build...")
             br = requests.post(f"{base}/repos/{owner}/{repo_name}/pages/builds", headers=hdrs, timeout=10)
             
             if br.status_code in (201, 202):
-                print("Pages build started successfully. Waiting for Pages to become available...")
+                logger.info("Pages build started successfully. Waiting for Pages to become available...")
                 def wait_for_github_pages(url: str, timeout: int = 600) -> bool:
-                    print(f"Waiting for GitHub Pages to become live at: {url}")
+                    logger.info("Waiting for GitHub Pages to become live at: %s", url)
                     start = time.time()
 
                     initial_wait = 30
@@ -392,7 +391,7 @@ def upsert_pages_index(
                     if time_elapsed < timeout:
                         to_wait = min(initial_wait, timeout - time_elapsed)
                         if to_wait > 0:
-                            print(f"Initial wait for {to_wait} seconds before first check...")
+                            logger.info("Initial wait for %s seconds before first check...", to_wait)
                             time.sleep(to_wait)
 
                     delay = 15  
@@ -401,12 +400,12 @@ def upsert_pages_index(
                         try:
                             r = requests.get(url, timeout=10)
                             if r.status_code == 200:
-                                print(f"GitHub Pages is live at: {url}")
+                                logger.info("GitHub Pages is live at: %s", url)
                                 return True
                             else:
-                                print(f"Still building... (status: {r.status_code})")
+                                logger.info("Still building... (status: %s)", r.status_code)
                         except RequestException:
-                            print("Still building... (no response)")
+                            logger.info("Still building... (no response)")
 
                         remaining = timeout - (time.time() - start)
                         if remaining <= 0:
@@ -414,26 +413,26 @@ def upsert_pages_index(
                         sleep_time = min(delay, remaining)
                         time.sleep(sleep_time)
 
-                    print("Timeout: GitHub Pages did not go live within the expected time.")
+                    logger.warning("Timeout: GitHub Pages did not go live within the expected time.")
                     return False
 
                 try:
                     wait_for_github_pages(f"https://{owner}.github.io/{repo_name}/", timeout=300)
                 except Exception as e:
-                    print(f"Warning: error while waiting for Pages: {str(e)}")
-                print("Pages build polling complete (may still be finalizing on GitHub's side)")
+                    logger.warning("Error while waiting for Pages: %s", str(e))
+                logger.info("Pages build polling complete (may still be finalizing on GitHub's side)")
             else:
-                print(f"Pages build request returned {br.status_code}: {br.text} (non-critical, Pages will build automatically)")
+                logger.info("Pages build request returned %s: %s (non-critical)", br.status_code, br.text)
         except Exception as e:
-            print(f"Could not request Pages build (non-critical): {str(e)}")
-            print("Pages will build automatically in the background")
+            logger.info("Could not request Pages build (non-critical): %s", str(e))
+            logger.info("Pages will build automatically in the background")
 
 
 def update_readme(repo, task: str, brief: str, repo_url: str, pages_url: str):
     readme_content = generate_readme_content(task, brief, repo_url, pages_url)
     
     if not readme_content:
-        print("Warning: No README content generated, skipping update")
+        logger.warning("No README content generated, skipping update")
         return
 
     try:
@@ -448,7 +447,7 @@ def update_readme(repo, task: str, brief: str, repo_url: str, pages_url: str):
         if e.status == 404:
             repo.create_file(path="README.md", message="Add README", content=readme_content)
         else:
-            print(f"Warning: Could not update README: {str(e)}")
+            logger.warning("Could not update README: %s", str(e))
 
 
 def test_github_manager():

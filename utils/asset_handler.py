@@ -175,7 +175,7 @@ def process_html_assets(html: str, repo, round_num: int = 1) -> str:
             )
             
             html = html.replace(full_uri, filename)
-            print(f"✅ Replaced data URI with: {filename}")
+            logger.info("Replaced data URI with: %s", filename)
             
         except Exception as e:
             logger.warning("Failed to process asset %s: %s", mime_type, str(e))

@@ -2,6 +2,9 @@ import base64
 import mimetypes
 from typing import Dict, Optional, Any
 import json
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 MAX_FULL_CONTENT_CHARS = 20000
