@@ -9,8 +9,10 @@ from utils import (
     notify_evaluation_api,
 )
 from utils.evidence import send_evidence_log
+from utils.logger import get_logger
 
 app = Flask(__name__)
+logger = get_logger(__name__)
 
 
 @app.route("/api-endpoint", methods=["POST"])
@@ -37,7 +39,7 @@ def handle_request():
         evaluation_url = data.get("evaluation_url", "")
         attachments = data.get("attachments", [])
 
-        print(f"Processing request for {email}, task: {task}, round: {round_num}")
+        logger.info(f"Processing request for %s, task: %s, round: %s", email, task, round_num)
 
         existing_code = ""
         if round_num > 1:
@@ -47,19 +49,14 @@ def handle_request():
 
                 existing_code = get_existing_code(task)
                 if existing_code:
-                    print(
-                        f"Successfully fetched existing code from Round {round_num - 1}"
-                    )
+                    logger.info("Fetched existing code from previous round")
                 else:
-                    print(
-                        "No existing code found (this is OK for first-time Round {round_num})"
-                    )
+                    logger.info("No existing code found for task '%s' (first-time or missing file)", task)
             except Exception as e:
-                print(f"Warning: Could not fetch existing code: {str(e)}")
-                print("Continuing without existing code (generating fresh)...")
+                logger.warning("Could not fetch existing code: %s. Proceeding fresh.", str(e))
 
         current_step = "generating code"
-        print("Generating app code with LLM...")
+        logger.info("Generating app code with LLM...")
         try:
             code_files = generate_app_code(
                 brief, checks, attachments, existing_code, round_num
@@ -68,14 +65,14 @@ def handle_request():
             return jsonify({"status": "error", "message": f"Code generation failed: {str(e)}"}), 500
 
         current_step = "creating/updating repository"
-        print("Creating/updating GitHub repository...")
+        logger.info("Creating/updating GitHub repository...")
         try:
             repo_info = create_or_update_repo(task, code_files, round_num)
         except Exception as e:
             return jsonify({"status": "error", "message": f"Repository operation failed: {str(e)}"}), 500
 
         current_step = "updating README"
-        print("Updating README...")
+        logger.info("Updating README...")
         try:
             update_readme(
                 repo_info["repo"],
@@ -92,7 +89,7 @@ def handle_request():
             commits = repo_info["repo"].get_commits()
             latest_commit_sha = commits[0].sha
         except Exception as e:
-            print(f"Warning: Could not fetch commits: {str(e)}")
+            logger.warning("Could not fetch commits: %s", str(e))
             latest_commit_sha = repo_info.get("commit_sha", "unknown")
 
         eval_data = {
@@ -106,12 +103,12 @@ def handle_request():
         }
 
         current_step = "notifying evaluation API"
-        print("Notifying evaluation API...")
+        logger.info("Notifying evaluation API...")
         notify_result = False
         try:
             notify_result = notify_evaluation_api(evaluation_url, eval_data)
         except Exception as e:
-            print(f"Warning: Evaluation API notification failed: {str(e)}")
+            logger.warning("Evaluation API notification failed: %s", str(e))
 
         response_data = {
             "status": "success",
@@ -126,15 +123,12 @@ def handle_request():
         try:
             send_evidence_log(data, response_data, request.remote_addr, request.url)
         except Exception as log_error:
-            print(f"Warning: Failed to log to Google Sheets: {str(log_error)}")
+            logger.warning("Failed to send evidence log: %s", str(log_error))
 
         return jsonify(response_data), 200
 
     except Exception as e:
-        print(f"Error processing request at step '{current_step}': {str(e)}")
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("Error processing request at step '%s': %s", current_step, str(e))
 
         error_message = str(e)
         if current_step != "initialization":
@@ -158,9 +152,9 @@ def handle_request():
         try:
             if data:
                 send_evidence_log(data, error_response, request.remote_addr, request.url)
-                print("logged for evidence")
+                logger.info("Error details logged for evidence")
         except Exception as log_error:
-            print(f"logged for evidence failed: {str(log_error)}")
+            logger.warning("Evidence log failed: %s", str(log_error))
 
         return jsonify(error_response), 500
 
@@ -174,8 +168,8 @@ def main():
     validate_config()
     config = load_config()
     port = config.get("port", 5000)
-    print(f"Starting LLM Code Deployment API on port {port}")
-    print(f"API endpoint: http://localhost:{port}/api-endpoint")
+    logger.info("Starting LLM Code Deployment API on port %s", port)
+    logger.info("API endpoint: http://localhost:%s/api-endpoint", port)
     app.run(host="0.0.0.0", port=port, debug=True)
 
 

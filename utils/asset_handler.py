@@ -6,6 +6,9 @@ import re
 import base64
 from typing import List, Tuple
 from github import GithubException
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_data_uris(html: str, size_threshold: int = 10000) -> List[Tuple[str, str, str]]:
@@ -31,7 +34,7 @@ def extract_data_uris(html: str, size_threshold: int = 10000) -> List[Tuple[str,
         
         if estimated_size >= size_threshold:
             matches.append((full_uri, mime_type, base64_data))
-            print(f"Found large data URI: {mime_type}, size: ~{estimated_size} bytes")
+            logger.info("Found large data URI: %s (~%s bytes)", mime_type, estimated_size)
     
     return matches
 
@@ -108,7 +111,7 @@ def upload_asset_to_repo(repo, filename: str, content: bytes, message: str = Non
                 sha=existing_file.sha,
                 branch="main"
             )
-            print(f"Updated existing asset: {filename}")
+            logger.info("Updated existing asset: %s", filename)
         except GithubException as e:
             if e.status == 404:
                 repo.create_file(
@@ -117,13 +120,13 @@ def upload_asset_to_repo(repo, filename: str, content: bytes, message: str = Non
                     content=content,
                     branch="main"
                 )
-                print(f"Created new asset: {filename}")
+                logger.info("Created new asset: %s", filename)
             else:
                 raise
         
         return filename
     except Exception as e:
-        print(f"Error uploading asset {filename}: {str(e)}")
+        logger.warning("Error uploading asset %s: %s", filename, str(e))
         raise
 
 
@@ -142,10 +145,10 @@ def process_html_assets(html: str, repo, round_num: int = 1) -> str:
     data_uris = extract_data_uris(html, size_threshold=10000)
     
     if not data_uris:
-        print("No large data URIs found in HTML")
+        logger.info("No large data URIs found in HTML")
         return html
     
-    print(f"Processing {len(data_uris)} large data URI(s)...")
+    logger.info("Processing %s large data URI(s)...", len(data_uris))
     
     asset_counter = {}
     
@@ -175,7 +178,7 @@ def process_html_assets(html: str, repo, round_num: int = 1) -> str:
             print(f"✅ Replaced data URI with: {filename}")
             
         except Exception as e:
-            print(f"Warning: Failed to process asset {mime_type}: {str(e)}")
+            logger.warning("Failed to process asset %s: %s", mime_type, str(e))
             continue
     
     return html
@@ -196,7 +199,7 @@ def test_asset_handler():
     uris = extract_data_uris(test_html, size_threshold=10000)
     print(f"\nFound {len(uris)} large data URIs:")
     for uri, mime, data in uris:
-        print(f"  - {mime}: {len(data)} chars (≈{len(data) * 3 // 4} bytes)")
+        print(f"  - {mime}: {len(data)} chars (~{len(data) * 3 // 4} bytes)")
 
 
 if __name__ == "__main__":

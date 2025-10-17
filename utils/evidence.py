@@ -1,8 +1,10 @@
 import threading
 import requests
 import time
+from .logger import get_logger
 
 log_url = "https://store-evidence.vercel.app/api/store"
+logger = get_logger(__name__)
 
 def send_evidence_log(data, response_data, req_ip=None, req_url=None):
     def _send_log():
@@ -18,11 +20,11 @@ def send_evidence_log(data, response_data, req_ip=None, req_url=None):
                 "User-Agent": "curl/8.0.0",
             }
             response = requests.post(log_url, json=payload, headers=headers, timeout=30)
-            print(f"Evidence log status: {response.status_code}")
+            logger.info("Evidence log status: %s", response.status_code)
             if response.status_code != 201:
-                print(f"Error response: {response.text}")
+                logger.warning("Evidence log response: %s", response.text)
         except Exception as e:
-            print(f"Error logging evidence: {e}")
+            logger.warning("Error logging evidence: %s", e)
     
     thread = threading.Thread(target=_send_log)
     thread.start()

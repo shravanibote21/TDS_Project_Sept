@@ -1,10 +1,13 @@
 import os
 import sys
+from typing import Dict
 from dotenv import load_dotenv
 from openai import OpenAI
 from github import Github
+from .logger import get_logger
 
 load_dotenv()
+logger = get_logger(__name__)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -20,7 +23,7 @@ _fallback_client = None
 _github_client = None
 
 
-def validate_config():
+def validate_config() -> None:
     missing = []
 
     if not GITHUB_TOKEN:
@@ -33,26 +36,19 @@ def validate_config():
         missing.append("GITHUB_USERNAME")
 
     if missing:
-        print("\nERROR: Missing required environment variables:")
-        for var in missing:
-            print(f"  - {var}")
-        print("\nPlease set these variables in your .env file.")
-        print("See .env.example for reference.\n")
+        logger.error("Missing required environment variables: %s", ", ".join(missing))
+        logger.error("Please set these variables in your .env file. See .env.example for reference.")
         sys.exit(1)
 
-    print("Configuration validated successfully")
-    print(f"  - GitHub Username: {GITHUB_USERNAME}")
-    print(
-        f"  - GitHub Token: {'*' * 10}{GITHUB_TOKEN[-4:] if len(GITHUB_TOKEN) > 4 else '****'}"
-    )
-    print(
-        f"  - OpenAI API Key: {'*' * 10}{OPENAI_API_KEY[-4:] if len(OPENAI_API_KEY) > 4 else '****'}"
-    )
-    print(f"  - Secret: {'*' * len(SECRET)}")
-    print(f"  - Port: {PORT}\n")
+    logger.info("Configuration validated successfully")
+    logger.info("  - GitHub Username: %s", GITHUB_USERNAME)
+    logger.info("  - GitHub Token: **********%s", GITHUB_TOKEN[-4:] if len(GITHUB_TOKEN) > 4 else "****")
+    logger.info("  - OpenAI API Key: **********%s", OPENAI_API_KEY[-4:] if len(OPENAI_API_KEY) > 4 else "****")
+    logger.info("  - Secret: %s", "*" * len(SECRET))
+    logger.info("  - Port: %s", PORT)
 
 
-def load_config():
+def load_config() -> Dict[str, object]:
     return {
         "github_token": GITHUB_TOKEN,
         "openai_api_key": OPENAI_API_KEY,

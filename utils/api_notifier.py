@@ -1,15 +1,19 @@
 import time
 from typing import Dict, Any
 import requests
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def notify_evaluation_api(
     evaluation_url: str, data: Dict[str, Any], max_retries: int = 5
 ) -> bool:
     delay = 1
+    session = requests.Session()
     for attempt in range(max_retries):
         try:
-            response = requests.post(
+            response = session.post(
                 evaluation_url,
                 json=data,
                 headers={"Content-Type": "application/json"},
@@ -17,20 +21,18 @@ def notify_evaluation_api(
             )
 
             if response.status_code == 200:
-                print(f"Successfully notified evaluation API: {response.text}")
+                logger.info("Successfully notified evaluation API")
                 return True
             else:
-                print(
-                    f"Evaluation API returned status {response.status_code}: {response.text}"
-                )
+                logger.warning("Evaluation API status %s: %s", response.status_code, response.text)
 
         except requests.RequestException as e:
-            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            logger.warning("Evaluation API attempt %s failed: %s", attempt + 1, str(e))
 
         if attempt < max_retries - 1:
-            print(f"Retrying in {delay} seconds...")
+            logger.info("Retrying evaluation API in %s seconds...", delay)
             time.sleep(delay)
             delay *= 2
 
-    print("Failed to notify evaluation API after all retries")
+    logger.error("Failed to notify evaluation API after all retries")
     return False

@@ -1,12 +1,18 @@
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 from .config import SECRET
 
 
 def verify_secret(provided_secret: str) -> bool:
+    """Check if provided secret matches configured secret."""
     return provided_secret == SECRET
 
 
-def validate_request(data: Dict[str, Any]) -> tuple[bool, str]:
+def validate_request(data: Dict[str, Any]) -> Tuple[bool, str]:
+    """Validate incoming JSON payload for /api-endpoint.
+
+    Returns:
+        Tuple of (is_valid, message).
+    """
     required_fields = [
         "email",
         "secret",
@@ -23,7 +29,8 @@ def validate_request(data: Dict[str, Any]) -> tuple[bool, str]:
 
     for field in good_to_have_fields:
         if field not in data:
-            print(f"Warning: Good-to-have field '{field}' is missing")
+            # Keep silent other than validation result to avoid log noise
+            pass
 
     for field in required_fields:
         if field not in data:
